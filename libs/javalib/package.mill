@@ -60,7 +60,7 @@ object `package` extends MillStableScalaModule {
 
   object backgroundwrapper extends MillPublishJavaModule with MillJavaModule {
     def mvnDeps = Seq(Deps.sbtTestInterface_api)
-    def jvmId = "11"
+    def jvmId = "" // NixOS: use system JVM
   }
 
   object api extends MillStableScalaModule with BuildInfo with MillJava11ScalaModule {
