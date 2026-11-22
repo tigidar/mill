@@ -8,7 +8,7 @@ object `package` extends MillPublishScalaModule with BuildInfo {
 
   def buildInfoPackageName = "mill.client"
 
-  def moduleDeps = Seq(build.core.internal, build.libs.rpc, build.core.api, build.libs.util)
+  def moduleDeps = Seq(build.core.internal, build.libs.rpc, build.core.api, build.libs.util, build.libs.javalib.`maven-resolver-core`)
 
   def mvnDeps = Seq(
     Deps.nativeTerminal,
@@ -31,4 +31,6 @@ object `package` extends MillPublishScalaModule with BuildInfo {
       BuildInfo.Value("jlineNativeVersion", jlineNativeVersion)
     )
   }
+
+  override lazy val test: MillScalaTests = new MillScalaTests {}
 }

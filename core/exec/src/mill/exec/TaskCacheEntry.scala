@@ -21,7 +21,8 @@ private[exec] final class TaskCacheEntry(
           inputsHash,
           millVersion = env.millVersion,
           millJvmVersion = env.millJvmVersion,
-          classLoaderSigHash = env.classLoaderSigHash
+          classLoaderSigHash = env.classLoaderSigHash,
+          millResolverBackend = env.millResolverBackend
         ),
         indent = 4
       ),
@@ -42,7 +43,12 @@ private[exec] final class TaskCacheEntry(
         catch { case NonFatal(_) => None }
     } yield {
       val envDiffReasons =
-        EnvSignature(cached.millVersion, cached.millJvmVersion, cached.classLoaderSigHash)
+        EnvSignature(
+          cached.millVersion,
+          cached.millJvmVersion,
+          cached.classLoaderSigHash,
+          cached.millResolverBackend
+        )
           .diffReasonsTo(currentEnv)
 
       TaskCacheEntry.Loaded(

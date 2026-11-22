@@ -42,6 +42,8 @@ object `package` extends MillStableScalaModule {
     super.localTestExtraModules ++ Seq(
       worker,
       `maven-worker`,
+      `maven-resolver-core`,
+      `maven-resolver-worker`,
       `pgp-worker`,
       `classgraph-worker`,
       `jarjarabrams-worker`,
@@ -254,6 +256,37 @@ object `package` extends MillStableScalaModule {
     // we exclude maven-worker module to workaround issue
     // https://github.com/com-lihaoyi/mill/pull/5977/#issuecomment-3407301062
     override def includeInApiDocs = false
+  }
+
+  /** Pure Maven Resolver engine logic — no Mill dependencies.
+    * Shared by the worker (daemon classloader) and the launcher (pre-daemon). */
+  object `maven-resolver-core` extends MillPublishScalaModule {
+    def moduleDeps = Seq(api)
+
+    def mvnDeps = {
+      val mavenResolverVersion = "2.0.13"
+      val mavenVersion = "3.9.9"
+
+      Seq(
+        mvn"org.apache.maven.resolver:maven-resolver-api:$mavenResolverVersion",
+        mvn"org.apache.maven.resolver:maven-resolver-util:$mavenResolverVersion",
+        mvn"org.apache.maven.resolver:maven-resolver-connector-basic:$mavenResolverVersion",
+        mvn"org.apache.maven.resolver:maven-resolver-supplier-mvn3:$mavenResolverVersion",
+        mvn"org.apache.maven.resolver:maven-resolver-transport-apache:$mavenResolverVersion",
+        mvn"org.apache.maven.resolver:maven-resolver-transport-file:$mavenResolverVersion",
+        mvn"org.apache.maven:maven-settings:$mavenVersion",
+        mvn"org.apache.maven:maven-settings-builder:$mavenVersion",
+        mvn"org.codehaus.plexus:plexus-sec-dispatcher:4.1.0",
+        // Required at runtime: plexus-utils 4.x removed XML pull classes that
+        // maven-model-builder still references; plexus-xml provides them
+        mvn"org.codehaus.plexus:plexus-xml:3.0.1"
+      )
+    }
+  }
+
+  /** Worker that runs in an isolated classloader and delegates to maven-resolver-core. */
+  object `maven-resolver-worker` extends MillPublishScalaModule {
+    def moduleDeps = Seq(build.libs.javalib, `maven-resolver-core`)
   }
 
   object `scalameta-worker` extends MillPublishScalaModule {

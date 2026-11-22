@@ -1,6 +1,7 @@
 package mill.launcher
 
 import io.github.alexarchambault.nativeterm.NativeTerminal
+import mill.api.ResolverType
 import mill.api.internal.OneOrMore
 import mill.client.ClientUtil
 import mill.constants.*
@@ -213,10 +214,21 @@ object MillProcessLauncher {
     )
   }
 
+  /**
+   * Read the resolver backend from config (`.mill-resolver-backend` or build header),
+   * validate it, and return the [[ResolverType]]. Defaults to [[ResolverType.Coursier]].
+   */
+  def resolverBackend(workDir: os.Path): ResolverType =
+    loadMillConfig(ConfigConstants.millResolverBackend, workDir).headOption match {
+      case Some(value) => ResolverType.parse(value)
+      case None => ResolverType.Coursier
+    }
+
   def javaHome(
       env: Map[String, String],
       workDir: os.Path,
-      millRepositories: Seq[String]
+      millRepositories: Seq[String],
+      resolverType: ResolverType = ResolverType.Coursier
   ): Option[os.Path] = {
     val jvmVersion = loadMillConfig(ConfigConstants.millJvmVersion, workDir)
       .headOption
@@ -232,7 +244,8 @@ object MillProcessLauncher {
         jvmVersion,
         jvmIndexVersion,
         OutputDirectoryLayout.regularOutDir(env),
-        millRepositories
+        millRepositories,
+        resolverType
       )
     }
   }
@@ -240,9 +253,10 @@ object MillProcessLauncher {
   def javaExe(
       env: Map[String, String],
       workDir: os.Path,
-      millRepositories: Seq[String]
+      millRepositories: Seq[String],
+      resolverType: ResolverType = ResolverType.Coursier
   ): String = {
-    javaHome(env, workDir, millRepositories) match {
+    javaHome(env, workDir, millRepositories, resolverType) match {
       case None => "java"
       case Some(home) =>
         val exeName = if (isWin) "java.exe" else "java"
@@ -262,6 +276,11 @@ object MillProcessLauncher {
 
     val serverTimeoutOpt = millServerTimeout.map(t => s"-Dmill.server_timeout=$t").toSeq
 
+    val backend = resolverBackend(workDir)
+    val resolverBackendOpt = Seq(
+      s"-Dmill.resolver.backend=${backend.toString.toLowerCase}"
+    )
+
     // UTF-8 encoding options to fix Unicode character display issues on Windows
     val encodingOpts = Seq(
       "-Dfile.encoding=UTF-8",
@@ -279,9 +298,10 @@ object MillProcessLauncher {
         Seq("--sun-misc-unsafe-memory-access=allow", "--enable-native-access=ALL-UNNAMED")
       else Nil
 
-    Seq(javaExe(env, workDir, millRepositories)) ++
+    Seq(javaExe(env, workDir, millRepositories, backend)) ++
       millProps ++
       serverTimeoutOpt ++
+      resolverBackendOpt ++
       encodingOpts ++
       jdk23PlusOpts ++
       loadMillConfig(ConfigConstants.millJvmOpts, workDir) ++

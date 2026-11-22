@@ -77,7 +77,12 @@ class SelectiveExecutionImpl(evaluator: Evaluator)
   ): DownstreamResult = {
     val allTasks = transitiveNamed.map(t => t: Task[?])
     def envSignature(m: SelectiveExecution.Metadata): EnvSignature =
-      EnvSignature(m.millVersion, m.millJvmVersion, m.classLoaderSigHash)
+      EnvSignature(
+        m.millVersion,
+        m.millJvmVersion,
+        m.classLoaderSigHash,
+        m.millResolverBackend
+      )
 
     envSignature(oldHashes).diffReasonsTo(envSignature(newHashes)).headOption
       .map(reason =>
@@ -328,7 +333,8 @@ object SelectiveExecutionImpl {
           forceRunTasks = Set(),
           millVersion = env.millVersion,
           millJvmVersion = env.millJvmVersion,
-          classLoaderSigHash = env.classLoaderSigHash
+          classLoaderSigHash = env.classLoaderSigHash,
+          millResolverBackend = env.millResolverBackend
         ),
         results.map { case (k, v) =>
           val execRes: ExecResult[Val] = v match {

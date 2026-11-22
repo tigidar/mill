@@ -15,7 +15,8 @@ package mill.api.internal
 private[mill] case class EnvSignature(
     millVersion: String,
     millJvmVersion: String,
-    classLoaderSigHash: Int
+    classLoaderSigHash: Int,
+    millResolverBackend: String
 ) {
 
   /**
@@ -30,7 +31,8 @@ private[mill] case class EnvSignature(
     Seq(
       reason("mill-version-changed", millVersion, other.millVersion),
       reason("mill-jvm-version-changed", millJvmVersion, other.millJvmVersion),
-      reason("classpath-changed", classLoaderSigHash, other.classLoaderSigHash)
+      reason("classpath-changed", classLoaderSigHash, other.classLoaderSigHash),
+      reason("mill-resolver-backend-changed", millResolverBackend, other.millResolverBackend)
     ).flatten
   }
 }
@@ -41,6 +43,7 @@ private[mill] object EnvSignature {
   def current(classLoaderSigHash: Int): EnvSignature = EnvSignature(
     millVersion = mill.constants.BuildInfo.millVersion,
     millJvmVersion = sys.props("java.version"),
-    classLoaderSigHash = classLoaderSigHash
+    classLoaderSigHash = classLoaderSigHash,
+    millResolverBackend = mill.api.ResolverType.current.toString
   )
 }
