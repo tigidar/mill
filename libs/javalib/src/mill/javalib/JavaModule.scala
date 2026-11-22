@@ -20,6 +20,7 @@ import mill.api.{
   MillException,
   ModuleRef,
   PathRef,
+  ResolverType,
   Result,
   Segment,
   Task,
@@ -1228,14 +1229,23 @@ trait JavaModule
   }
 
   private[mill] def resolvedMvnDeps0(sources: Boolean) = Task.Anon {
+    val deps =
+      if (ResolverType.current == ResolverType.Maven)
+        // For Maven resolver: pass actual Maven deps directly. The mill-internal
+        // synthetic deps are Coursier constructs for project-based resolution and
+        // are not real Maven artifacts.
+        (mandatoryMvnDeps() ++ mvnDeps() ++ compileMvnDeps()).map(bindDependency())
+      else
+        Seq(
+          BoundDep(
+            coursierDependencyTask().withConfiguration(cs.Configuration.provided),
+            force = false
+          ),
+          BoundDep(coursierDependencyTask(), force = false)
+        )
+
     millResolver().classpath(
-      Seq(
-        BoundDep(
-          coursierDependencyTask().withConfiguration(cs.Configuration.provided),
-          force = false
-        ),
-        BoundDep(coursierDependencyTask(), force = false)
-      ),
+      deps,
       sources = sources,
       artifactTypes = if (sources) None else Some(artifactTypes()),
       resolutionParamsMapOpt =
@@ -1318,13 +1328,19 @@ trait JavaModule
         if (warn.nonEmpty) Task.log.warn(warn.mkString("\n"))
       )
     }
-    millResolver().classpath(
-      Seq(
-        BoundDep(
-          coursierDependencyTask().withConfiguration(cs.Configuration.runtime),
-          force = false
+    val deps =
+      if (ResolverType.current == ResolverType.Maven)
+        (mandatoryMvnDeps() ++ mvnDeps() ++ runMvnDeps()).map(bindDependency())
+      else
+        Seq(
+          BoundDep(
+            coursierDependencyTask().withConfiguration(cs.Configuration.runtime),
+            force = false
+          )
         )
-      ),
+
+    millResolver().classpath(
+      deps,
       artifactTypes = Some(artifactTypes()),
       resolutionParamsMapOpt =
         Some { params =>

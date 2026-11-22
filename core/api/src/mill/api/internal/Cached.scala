@@ -7,7 +7,8 @@ private[mill] case class Cached(
     millVersion: String = "",
     millJvmVersion: String = "",
     // Hash of the classloader (Mill jars + build dependencies), 0 means not tracked (old cache)
-    classLoaderSigHash: Int = 0
+    classLoaderSigHash: Int = 0,
+    millResolverBackend: String = ""
 )
 
 private[mill] object Cached {

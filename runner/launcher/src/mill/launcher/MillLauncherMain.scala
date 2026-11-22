@@ -67,7 +67,9 @@ object MillLauncherMain {
     try {
       val millRepositories =
         MillProcessLauncher.loadMillConfig(ConfigConstants.millRepositories, workDir)
-      val runnerClasspath = CoursierClient.resolveMillDaemon(regularOutDir, millRepositories)
+      val resolverType = MillProcessLauncher.resolverBackend(workDir)
+      val runnerClasspath =
+        CoursierClient.resolveMillDaemon(regularOutDir, millRepositories, resolverType)
       val optsArgs = MillProcessLauncher.loadMillConfig(ConfigConstants.millOpts, workDir) ++ args
 
       if (runNoDaemon)
@@ -151,7 +153,12 @@ object MillLauncherMain {
     )
 
     val daemonDir = outDir / OutFiles.OutFiles.millDaemon
-    val javaHome = MillProcessLauncher.javaHome(effectiveEnv, workDir, millRepositories)
+    val javaHome = MillProcessLauncher.javaHome(
+      effectiveEnv,
+      workDir,
+      millRepositories,
+      MillProcessLauncher.resolverBackend(workDir)
+    )
 
     MillProcessLauncher.prepareMillRunFolder(daemonDir)
 

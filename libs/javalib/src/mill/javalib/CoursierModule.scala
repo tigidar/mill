@@ -6,7 +6,7 @@ import coursier.core.Resolution
 import coursier.core.VariantSelector.VariantMatcher
 import coursier.params.ResolutionParams
 import coursier.{BomDependency, Dependency, Fetch, Repository}
-import mill.api.{ModuleRef, PathRef, Result, Task}
+import mill.api.{ModuleRef, PathRef, ResolverType, Result, Task}
 import mill.util.Jvm
 import mill.T
 
@@ -18,7 +18,7 @@ import scala.annotation.unused
  * It's mainly used in [[JavaModule]], but can also be used stand-alone,
  * in which case you must provide repositories by overriding [[CoursierModule.repositoriesTask]].
  */
-trait CoursierModule extends mill.api.Module {
+trait CoursierModule extends mill.api.Module with MavenResolverSupport {
 
   /**
    * Whether to enable Gradle Module support when fetching dependencies
@@ -44,19 +44,34 @@ trait CoursierModule extends mill.api.Module {
    *
    * @return `CoursierModule.Resolver` instance
    */
-  def millResolver: Task[CoursierModule.Resolver] = Task.Anon {
-    new CoursierModule.Resolver(
-      repositories = allRepositories(),
-      bind = bindDependency(),
-      mapDependencies = Some(mapDependencies()),
-      customizer = resolutionCustomizer(),
-      coursierCacheCustomizer = coursierCacheCustomizer(),
-      resolutionParams = resolutionParams(),
-      offline = Task.offline,
-      checkGradleModules = checkGradleModules(),
-      config = coursierConfigModule().coursierConfig()
-    )
-  }
+  def millResolver: Task[CoursierModule.Resolver] =
+    if (ResolverType.current == ResolverType.Maven) Task.Anon {
+      new CoursierModule.Resolver(
+        repositories = allRepositories(),
+        bind = bindDependency(),
+        mapDependencies = Some(mapDependencies()),
+        customizer = resolutionCustomizer(),
+        coursierCacheCustomizer = coursierCacheCustomizer(),
+        resolutionParams = resolutionParams(),
+        offline = Task.offline,
+        checkGradleModules = checkGradleModules(),
+        config = coursierConfigModule().coursierConfig(),
+        mavenResolverWorker = Some(mavenResolverWorker())
+      )
+    }
+    else Task.Anon {
+      new CoursierModule.Resolver(
+        repositories = allRepositories(),
+        bind = bindDependency(),
+        mapDependencies = Some(mapDependencies()),
+        customizer = resolutionCustomizer(),
+        coursierCacheCustomizer = coursierCacheCustomizer(),
+        resolutionParams = resolutionParams(),
+        offline = Task.offline,
+        checkGradleModules = checkGradleModules(),
+        config = coursierConfigModule().coursierConfig()
+      )
+    }
 
   /**
    * A `CoursierModule.Resolver` to resolve dependencies.
@@ -66,19 +81,25 @@ trait CoursierModule extends mill.api.Module {
    *
    * @return `CoursierModule.Resolver` instance
    */
-  def defaultResolver: Task[CoursierModule.Resolver] = Task.Anon {
-    new CoursierModule.Resolver(
-      repositories = repositoriesTask(),
-      bind = bindDependency(),
-      mapDependencies = Some(mapDependencies()),
-      customizer = resolutionCustomizer(),
-      coursierCacheCustomizer = coursierCacheCustomizer(),
-      resolutionParams = resolutionParams(),
-      offline = Task.offline,
-      checkGradleModules = checkGradleModules(),
-      config = coursierConfigModule().coursierConfig()
-    )
-  }
+  def defaultResolver: Task[CoursierModule.Resolver] =
+    // Always use Coursier for defaultResolver — it resolves Mill's own internal
+    // modules (workers, plugins) which must not go through the Maven resolver.
+    // The Maven resolver worker itself is loaded via defaultResolver, so using
+    // Maven here would create a circular dependency. Only millResolver dispatches
+    // to the configured backend for user dependency resolution.
+    Task.Anon {
+      new CoursierModule.Resolver(
+        repositories = repositoriesTask(),
+        bind = bindDependency(),
+        mapDependencies = Some(mapDependencies()),
+        customizer = resolutionCustomizer(),
+        coursierCacheCustomizer = coursierCacheCustomizer(),
+        resolutionParams = resolutionParams(),
+        offline = Task.offline,
+        checkGradleModules = checkGradleModules(),
+        config = coursierConfigModule().coursierConfig()
+      )
+    }
 
   /**
    * Map dependencies before resolving them - use only if you know what you are doing.
@@ -244,7 +265,8 @@ object CoursierModule {
       // Introduced in https://github.com/com-lihaoyi/mill/commit/451df6846861a9c7d265bffec0c5fcf07133b320
       @unused offline: Boolean,
       checkGradleModules: Boolean,
-      @unroll config: mill.util.CoursierConfig = mill.util.CoursierConfig.default()
+      @unroll config: mill.util.CoursierConfig = mill.util.CoursierConfig.default(),
+      @unroll mavenResolverWorker: Option[mill.javalib.internal.MavenResolverSupport.Api] = None
   ) {
 
     /**
@@ -273,7 +295,8 @@ object CoursierModule {
         resolutionParams = resolutionParamsMapOpt.fold(resolutionParams)(_(resolutionParams)),
         checkGradleModules = checkGradleModules,
         config = config,
-        boms = boms
+        boms = boms,
+        mavenResolverWorker = mavenResolverWorker
       ).get
 
     /**
@@ -299,7 +322,8 @@ object CoursierModule {
         resolutionParams = resolutionParams,
         boms = boms,
         checkGradleModules = checkGradleModules,
-        config = config
+        config = config,
+        mavenResolverWorker = mavenResolverWorker
       ).get
     }
 
@@ -314,15 +338,22 @@ object CoursierModule {
         .iterator
         .map(implicitly[CoursierModule.Resolvable[T]].bind(_, bind))
         .toSeq
-      Jvm.fetchArtifacts(
-        repositories,
-        deps0.map(_.dep),
-        sources = sources,
-        ctx = Some(ctx),
-        resolutionParams = resolutionParams,
-        checkGradleModules = checkGradleModules,
-        config = config
-      ).get
+      mavenResolverWorker match {
+        case Some(worker) if ResolverType.current == ResolverType.Maven =>
+          Lib.fetchArtifactsMaven(
+            worker, deps0, repositories, sources, mapDependencies, Some(ctx)
+          ).get
+        case _ =>
+          Jvm.fetchArtifacts(
+            repositories,
+            deps0.map(_.dep),
+            sources = sources,
+            ctx = Some(ctx),
+            resolutionParams = resolutionParams,
+            checkGradleModules = checkGradleModules,
+            config = config
+          ).get
+      }
     }
 
     /**
@@ -347,16 +378,23 @@ object CoursierModule {
         .iterator
         .map(summon[CoursierModule.Resolvable[T]].bind(_, bind))
         .toSeq
-      Jvm.getArtifacts(
-        repositories,
-        deps0.map(_.dep),
-        sources = sources,
-        artifactTypes = artifactTypes,
-        ctx = Some(ctx),
-        checkGradleModules = checkGradleModules,
-        resolutionParams = resolutionParams,
-        config = config
-      ).get
+      mavenResolverWorker match {
+        case Some(worker) if ResolverType.current == ResolverType.Maven =>
+          Lib.getArtifactsMaven(
+            worker, deps0, repositories, sources, mapDependencies, Some(ctx)
+          ).get
+        case _ =>
+          Jvm.getArtifacts(
+            repositories,
+            deps0.map(_.dep),
+            sources = sources,
+            artifactTypes = artifactTypes,
+            ctx = Some(ctx),
+            checkGradleModules = checkGradleModules,
+            resolutionParams = resolutionParams,
+            config = config
+          ).get
+      }
     }
   }
 

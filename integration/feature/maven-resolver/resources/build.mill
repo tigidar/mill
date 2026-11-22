@@ -1,0 +1,8 @@
+package build
+import mill.*, javalib.*
+
+object foo extends JavaModule {
+  def mvnDeps = Seq(
+    mvn"com.google.code.gson:gson:2.11.0"
+  )
+}

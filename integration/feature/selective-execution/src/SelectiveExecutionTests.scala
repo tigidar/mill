@@ -184,6 +184,57 @@ object SelectiveExecutionTests extends UtestIntegrationTestSuite {
       )
     }
 
+    test("resolver-backend-change-triggers-full-rerun") - integrationTest { tester =>
+      import tester.*
+
+      // Prepare selective execution with multiple tasks
+      eval(("selective.prepare", "{foo,bar}._"), check = true)
+
+      // Without any changes, selective.resolve should return nothing
+      val resolve1 = eval(("selective.resolve", "{foo,bar}._"), check = true)
+      assert(resolve1.out == "")
+
+      // Modify the millResolverBackend in the metadata file to simulate a backend switch
+      val metadataPath = workspacePath / "out/mill-selective-execution.json"
+      val metadata = ujson.read(os.read(metadataPath))
+      metadata("millResolverBackend") = "Maven"
+      os.write.over(metadataPath, ujson.write(metadata, indent = 2))
+
+      // Now selective.resolve should return all tasks since the resolver backend changed
+      val resolve2 = eval(("selective.resolve", "{foo,bar}._"), check = true)
+      val resolvedTasks = resolve2.out.linesIterator.toList.sorted
+
+      // All tasks should be invalidated
+      assert(resolvedTasks.nonEmpty)
+      assert(resolvedTasks.contains("foo.fooCommand"))
+      assert(resolvedTasks.contains("bar.barCommand"))
+
+      // Check that resolveTree shows the resolver backend changed reason
+      val resolveTree = eval(("selective.resolveTree", "{foo,bar}._"), check = true)
+
+      // Normalize the resolver backend values in the output for comparison
+      val normalizedTree = resolveTree.out.linesIterator.toSeq.map { line =>
+        line.replaceAll(
+          "mill-resolver-backend-changed:Maven->[^\"]+",
+          "mill-resolver-backend-changed:OLD->NEW"
+        )
+      }
+
+      assertGoldenLiteral(
+        normalizedTree,
+        Seq(
+          "{",
+          "  \"mill-resolver-backend-changed:OLD->NEW\": {",
+          "    \"bar.barCommand\": {},",
+          "    \"bar.barCommand2\": {},",
+          "    \"foo.fooCommand\": {},",
+          "    \"foo.fooTask\": {}",
+          "  }",
+          "}"
+        )
+      )
+    }
+
     test("classpath") - integrationTest { tester =>
       import tester.*
 

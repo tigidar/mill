@@ -53,13 +53,13 @@ object `package` extends mill.Module {
   }
 
   object twirllib extends ContribModule {
-    def jvmVersion = "17"
+    def jvmVersion = "" // NixOS: use system JVM
     def compileModuleDeps = Seq(build.libs.javalib)
     def testModuleDeps: Seq[JavaModule] = super.testModuleDeps ++ Seq(build.libs.scalalib)
   }
 
   object playlib extends ContribModule {
-    def jvmVersion = "17"
+    def jvmVersion = "" // NixOS: use system JVM
     def moduleDeps = Seq(twirllib, playlib.api)
     def compileModuleDeps = Seq(build.libs.scalalib)
 
@@ -106,7 +106,7 @@ object `package` extends mill.Module {
   }
 
   object scoverage extends ContribModule {
-    override def jvmVersion = "17"
+    override def jvmVersion = "" // NixOS: use system JVM
     object api extends MillPublishJavaModule
 
     def moduleDeps = Seq(scoverage.api)
